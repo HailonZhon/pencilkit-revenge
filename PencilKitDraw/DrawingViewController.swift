@@ -32,45 +32,46 @@ Abstract:
 import UIKit
 import PencilKit
 
+
 class DrawingViewController: UIViewController, PKCanvasViewDelegate, PKToolPickerObserver, UIScreenshotServiceDelegate {
     
+    // 与 Interface Builder 关联的画布视图和工具栏按钮。
     @IBOutlet weak var canvasView: PKCanvasView!
-    @IBOutlet var undoBarButtonitem: UIBarButtonItem!
-    @IBOutlet var redoBarButtonItem: UIBarButtonItem!
+//    @IBOutlet var undoBarButtonitem: UIBarButtonItem!
+//    @IBOutlet var redoBarButtonItem: UIBarButtonItem!
     
     var toolPicker: PKToolPicker!
     var signDrawingItem: UIBarButtonItem!
     
-    /// On iOS 14.0, this is no longer necessary as the finger vs pencil toggle is a global setting in the toolpicker
+    // 在 iOS 14.0 中，这不再必要，因为手指与铅笔的切换是工具选择器的全局设置
     var pencilFingerBarButtonItem: UIBarButtonItem!
 
-    /// Standard amount of overscroll allowed in the canvas.
+    // 画布的标准过度滚动高度。
     static let canvasOverscrollHeight: CGFloat = 500
     
-    /// Data model for the drawing displayed by this view controller.
+    // 当前绘图的数据模型。
     var dataModelController: DataModelController!
     
-    /// Private drawing state.
+    // 私有绘图状态。
     var drawingIndex: Int = 0
     var hasModifiedDrawing = false
     
-    // MARK: View Life Cycle
+    // 视图生命周期
     
-    /// Set up the drawing initially.
+    // 视图将要出现时的设置。
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         
-        // Set up the canvas view with the first drawing from the data model.
+        // 使用数据模型中的第一个绘图设置画布视图。
         canvasView.delegate = self
         canvasView.drawing = dataModelController.drawings[drawingIndex]
         canvasView.alwaysBounceVertical = true
         
-        // Set up the tool picker
+        // 设置工具选择器。
         if #available(iOS 14.0, *) {
             toolPicker = PKToolPicker()
         } else {
-            // Set up the tool picker, using the window of our parent because our view has not
-            // been added to a window yet.
+            // 使用父视图的窗口来设置工具选择器，因为我们的视图还没有被添加到窗口上。
             let window = parent?.view.window
             toolPicker = PKToolPicker.shared(for: window!)
         }
@@ -81,11 +82,11 @@ class DrawingViewController: UIViewController, PKCanvasViewDelegate, PKToolPicke
         updateLayout(for: toolPicker)
         canvasView.becomeFirstResponder()
         
-        // Add a button to sign the drawing in the bottom right hand corner of the page
-        signDrawingItem = UIBarButtonItem(title: "Sign Drawing", style: .plain, target: self, action: #selector(signDrawing(sender:)))
-        navigationItem.rightBarButtonItems?.append(signDrawingItem)
+        // 添加“签名绘图”按钮到页面右下角。
+//        signDrawingItem = UIBarButtonItem(title: "Sign Drawing", style: .plain, target: self, action: #selector(signDrawing(sender:)))
+//        navigationItem.rightBarButtonItems?.append(signDrawingItem)
         
-        // Before iOS 14, add a button to toggle finger drawing.
+        // 在 iOS 14 之前，添加一个按钮来切换手指绘图功能。
         if #available(iOS 14.0, *) { } else {
             pencilFingerBarButtonItem = UIBarButtonItem(title: "Enable Finger Drawing",
                                                         style: .plain,
@@ -95,14 +96,14 @@ class DrawingViewController: UIViewController, PKCanvasViewDelegate, PKToolPicke
             canvasView.allowsFingerDrawing = false
         }
         
-        // Always show a back button.
+        // 总是显示返回按钮。
         navigationItem.leftItemsSupplementBackButton = true
         
-        // Set this view controller as the delegate for creating full screenshots.
+        // 设置这个视图控制器作为创建全屏截图的代理。
         parent?.view.window?.windowScene?.screenshotService?.delegate = self
     }
     
-    /// When the view is resized, adjust the canvas scale so that it is zoomed to the default `canvasWidth`.
+    // 视图布局变化时，调整画布的缩放以便缩放到默认的 `canvasWidth`。
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         
@@ -111,32 +112,31 @@ class DrawingViewController: UIViewController, PKCanvasViewDelegate, PKToolPicke
         canvasView.maximumZoomScale = canvasScale
         canvasView.zoomScale = canvasScale
         
-        // Scroll to the top.
+        // 滚动到顶部。
         updateContentSizeForDrawing()
         canvasView.contentOffset = CGPoint(x: 0, y: -canvasView.adjustedContentInset.top)
     }
     
-    /// When the view is removed, save the modified drawing, if any.
+    // 视图将要消失时，如果有修改，则保存修改后的绘图。
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         
-        // Update the drawing in the data model, if it has changed.
         if hasModifiedDrawing {
             dataModelController.updateDrawing(canvasView.drawing, at: drawingIndex)
         }
         
-        // Remove this view controller as the screenshot delegate.
+        // 移除这个视图控制器作为截图代理。
         view.window?.windowScene?.screenshotService?.delegate = nil
     }
     
-    /// Hide the home indicator, as it will affect latency.
+    // 隐藏家庭指示器，因为它会影响延迟。
     override var prefersHomeIndicatorAutoHidden: Bool {
         return true
     }
     
-    // MARK: Actions
+    // 行为
     
-    /// Action method: Turn finger drawing on or off, but only on devices before iOS 14.0
+    // 切换手指绘图功能的动作方法，仅在 iOS 14.0 之前的设备上有效。
     @IBAction func toggleFingerPencilDrawing(_ sender: Any) {
         if #available(iOS 14.0, *) { } else {
             canvasView.allowsFingerDrawing.toggle()
@@ -144,52 +144,42 @@ class DrawingViewController: UIViewController, PKCanvasViewDelegate, PKToolPicke
             pencilFingerBarButtonItem.title = title
         }
     }
-    
-    /// Helper method to set a new drawing, with an undo action to go back to the old one.
-    func setNewDrawingUndoable(_ newDrawing: PKDrawing) {
-        let oldDrawing = canvasView.drawing
-        undoManager?.registerUndo(withTarget: self) {
-            $0.setNewDrawingUndoable(oldDrawing)
-        }
-        canvasView.drawing = newDrawing
-    }
-    
-    /// Action method: Add a signature to the current drawing.
-    @IBAction func signDrawing(sender: UIBarButtonItem) {
-        
-        // Get the signature drawing at the canvas scale.
-        var signature = dataModelController.signature
-        let signatureBounds = signature.bounds
-        let loc = CGPoint(x: canvasView.bounds.maxX, y: canvasView.bounds.maxY)
-        let scaledLoc = CGPoint(x: loc.x / canvasView.zoomScale, y: loc.y / canvasView.zoomScale)
-        signature.transform(using: CGAffineTransform(translationX: scaledLoc.x - signatureBounds.maxX, y: scaledLoc.y - signatureBounds.maxY))
+//    func setNewDrawingUndoable(_ newDrawing: PKDrawing) {
+//        let oldDrawing = canvasView.drawing
+//        undoManager?.registerUndo(withTarget: self) {
+//            $0.setNewDrawingUndoable(oldDrawing)
+//        }
+//        canvasView.drawing = newDrawing
+//    }
+    // 添加签名到当前绘图的动作方法。
+//    @IBAction func signDrawing(sender: UIBarButtonItem) {
+//        // 获取签名绘图，并按照画布的缩放调整。
+//        var signature = dataModelController.signature
+//        let signatureBounds = signature.bounds
+//        let loc = CGPoint(x: canvasView.bounds.maxX, y: canvasView.bounds.maxY)
+//        let scaledLoc = CGPoint(x: loc.x / canvasView.zoomScale, y: loc.y / canvasView.zoomScale)
+//        signature.transform(using: CGAffineTransform(translationX: scaledLoc.x - signatureBounds.maxX, y: scaledLoc.y - signatureBounds.maxY))
+//
+//        // 将签名绘图添加到当前画布绘图上。
+//        setNewDrawingUndoable(canvasView.drawing.appending(signature))
+//    }
 
-        // Add the signature drawing to the current canvas drawing.
-        setNewDrawingUndoable(canvasView.drawing.appending(signature))
-    }
+    // 导航
     
-    // MARK: Navigation
+    // 画布视图代理
     
-    /// Set up the signature view controller.
-    override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
-        (segue.destination as? SignatureViewController)?.dataModelController = dataModelController
-    }
-    
-    // MARK: Canvas View Delegate
-    
-    /// Delegate method: Note that the drawing has changed.
+    // 绘图改变时的代理方法。
     func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
         hasModifiedDrawing = true
         updateContentSizeForDrawing()
     }
     
-    /// Helper method to set a suitable content size for the canvas view.
+    // 调整画布视图的内容大小以适应绘图。
     func updateContentSizeForDrawing() {
-        // Update the content size to match the drawing.
         let drawing = canvasView.drawing
         let contentHeight: CGFloat
         
-        // Adjust the content size to always be bigger than the drawing height.
+        // 调整内容大小以始终大于绘图高度。
         if !drawing.bounds.isNull {
             contentHeight = max(canvasView.bounds.height, (drawing.bounds.maxY + DrawingViewController.canvasOverscrollHeight) * canvasView.zoomScale)
         } else {
@@ -198,41 +188,28 @@ class DrawingViewController: UIViewController, PKCanvasViewDelegate, PKToolPicke
         canvasView.contentSize = CGSize(width: DataModel.canvasWidth * canvasView.zoomScale, height: contentHeight)
     }
     
-    // MARK: Tool Picker Observer
+    // 工具选择器观察者
     
-    /// Delegate method: Note that the tool picker has changed which part of the canvas view
-    /// it obscures, if any.
+    // 工具选择器改变遮盖画布视图的部分时的代理方法。
     func toolPickerFramesObscuredDidChange(_ toolPicker: PKToolPicker) {
         updateLayout(for: toolPicker)
     }
     
-    /// Delegate method: Note that the tool picker has become visible or hidden.
+    // 工具选择器变为可见或隐藏时的代理方法。
     func toolPickerVisibilityDidChange(_ toolPicker: PKToolPicker) {
         updateLayout(for: toolPicker)
     }
     
-    /// Helper method to adjust the canvas view size when the tool picker changes which part
-    /// of the canvas view it obscures, if any.
-    ///
-    /// Note that the tool picker floats over the canvas in regular size classes, but docks to
-    /// the canvas in compact size classes, occupying a part of the screen that the canvas
-    /// could otherwise use.
+    // 当工具选择器改变遮盖画布视图的部分时，调整画布视图的大小。
     func updateLayout(for toolPicker: PKToolPicker) {
         let obscuredFrame = toolPicker.frameObscured(in: view)
         
-        // If the tool picker is floating over the canvas, it also contains
-        // undo and redo buttons.
         if obscuredFrame.isNull {
             canvasView.contentInset = .zero
             navigationItem.leftBarButtonItems = []
-        }
-        
-        // Otherwise, the bottom of the canvas should be inset to the top of the
-        // tool picker, and the tool picker no longer displays its own undo and
-        // redo buttons.
-        else {
+        } else {
             canvasView.contentInset = UIEdgeInsets(top: 0, left: 0, bottom: view.bounds.maxY - obscuredFrame.minY, right: 0)
-            navigationItem.leftBarButtonItems = [undoBarButtonitem, redoBarButtonItem]
+//            navigationItem.leftBarButtonItems = [undoBarButtonitem, redoBarButtonItem]
         }
         canvasView.scrollIndicatorInsets = canvasView.contentInset
     }

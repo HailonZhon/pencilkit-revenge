@@ -14,8 +14,9 @@ The application delegate maintains the app's life cycle.
 
 import UIKit
 
+// 应用程序代理类，负责应用程序的启动和生命周期管理。
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
+    
 }
-
